@@ -1,6 +1,5 @@
 import tkinter as tk
 import random
-import os
 
 # --- УРОВЕНЬ 1: Изменяем настройки окна и игры ---
 root = tk.Tk()
@@ -16,29 +15,17 @@ canvas = tk.Canvas(
 )
 canvas.pack()
 
-# --- ФУНКЦИЯ БЕЗОПАСНОЙ ЗАГРУЗКИ КАРТИНОК ---
-# Если картинки нет, возвращает False, и игра нарисует красивую фигуру-заглушку.
-def load_image(path):
-    if os.path.exists(path):
-        try:
-            return tk.PhotoImage(file=path)
-        except Exception:
-            return None
-    return None
+# --- УРОВЕНЬ 2: Загрузка картинок через tk.PhotoImage ---
+# Убедитесь, что файлы лежат в папке img/ рядом с вашим скриптом!
+bg_image = tk.PhotoImage(file="img/tree.png")
+basket_image = tk.PhotoImage(file="img/basket.png")
+apple_image = tk.PhotoImage(file="img/apple.png")
+pear_image = tk.PhotoImage(file="img/pear.png")
+bomb_image = tk.PhotoImage(file="img/bomb.png")
+trash_image = tk.PhotoImage(file="img/can.png")
 
-# Пытаемся загрузить картинки
-bg_image = load_image("img/tree.png")
-basket_image = load_image("img/basket.png")
-apple_image = load_image("img/apple.png")
-pear_image = load_image("img/pear.png")
-bomb_image = load_image("img/bomb.png")
-trash_image = load_image("img/can.png")
-
-# Отрисовка фона (если картинки нет — будет тёмно-зелёный фон)
-if bg_image:
-    bg_id = canvas.create_image(0, 0, image=bg_image, anchor="nw")
-else:
-    bg_id = canvas.create_rectangle(0, 0, WIDTH, HEIGHT, fill="#2e5c1e", outline="")
+# Отрисовка фона
+bg_id = canvas.create_image(0, 0, image=bg_image, anchor="nw")
 
 # Счёт и УРОВЕНЬ 4: Таймер вместо жизней
 score = 0
@@ -62,77 +49,66 @@ timer_text = canvas.create_text(
     fill="red"
 )
 
-# Корзинка (Заменена на картинку по Уровню 2 / фигуру при отсутствии)
+# Корзинка (Заменена на картинку по Уровню 2)
 basket_x = WIDTH // 2
 basket_y = HEIGHT - 60
 
-if basket_image:
-    basket = canvas.create_image(basket_x, basket_y, image=basket_image)
-else:
-    # Если картинки нет — рисуем коричневую корзину прямоугольником
-    basket = canvas.create_rectangle(basket_x - 40, basket_y - 20, basket_x + 40, basket_y + 20, fill="#8B4513", outline="white", width=2)
+basket = canvas.create_image(
+    basket_x,
+    basket_y,
+    image=basket_image
+)
 
 # Падающие предметы
 objects = []
 
-# Вспомогательная функция создания предмета (картинка или цветной кружок)
-def draw_falling_item(x, y, img, backup_color):
-    if img:
-        return canvas.create_image(x, y, image=img)
-    else:
-        # Если картинки нет — рисуем круг радиусом 15 пикселей
-        return canvas.create_oval(x - 15, y - 15, x + 15, y + 15, fill=backup_color, outline="white")
 
 # Создание предметов
 def create_object():
     if not game_active:
         return
 
+    # Подстраиваем спавн под новые размеры окна
     x = random.randint(40, WIDTH - 40)
-    y = 30
+    y = 0
 
     # УРОВЕНЬ 2 и 4: Разделение на 4 типа предметов с разным шансом
     rand_num = random.randint(1, 10)
 
-    if rand_num <= 5:  # 50% шанс — Яблоко (Красное)
-        item = draw_falling_item(x, y, apple_image, "red")
+    if rand_num <= 5:  # 50% шанс — Яблоко
+        item = canvas.create_image(x, y, image=apple_image)
         object_type = "apple"
-    elif rand_num <= 7:  # 20% шанс — Груша (Жёлтая)
-        item = draw_falling_item(x, y, pear_image, "yellow")
+    elif rand_num <= 7:  # 20% шанс — Груша (+2 очка)
+        item = canvas.create_image(x, y, image=pear_image)
         object_type = "pear"
-    elif rand_num <= 9:  # 20% шанс — Банка/Мусор (Серый)
-        item = draw_falling_item(x, y, trash_image, "gray")
+    elif rand_num <= 9:  # 20% шанс — Банка/Мусор (-1 очко)
+        item = canvas.create_image(x, y, image=trash_image)
         object_type = "trash"
-    else:  # 10% шанс — Опасная бомба (Чёрная)
-        item = draw_falling_item(x, y, bomb_image, "black")
+    else:  # 10% шанс — Опасная бомба (-2 очка)
+        item = canvas.create_image(x, y, image=bomb_image)
         object_type = "bomb"
 
     objects.append([item, x, y, object_type])
 
     # УРОВЕНЬ 3: Время между появлением предметов уменьшается с ростом счёта
+    # Стартуем с 1000мс, уменьшаем на каждые 15мс за очко, но не быстрее 400мс
     current_delay = max(400, 1000 - (score * 15))
     root.after(current_delay, create_object)
 
 
-# Движение корзинки
+# Движение корзинки (с учётом новых границ окна 600px)
 def move_left(event):
     global basket_x
     if game_active and basket_x > 50:
         basket_x -= 25
-        if basket_image:
-            canvas.coords(basket, basket_x, basket_y)
-        else:
-            canvas.coords(basket, basket_x - 40, basket_y - 20, basket_x + 40, basket_y + 20)
+        canvas.coords(basket, basket_x, basket_y)
 
 
 def move_right(event):
     global basket_x
     if game_active and basket_x < WIDTH - 50:
         basket_x += 25
-        if basket_image:
-            canvas.coords(basket, basket_x, basket_y)
-        else:
-            canvas.coords(basket, basket_x - 40, basket_y - 20, basket_x + 40, basket_y + 20)
+        canvas.coords(basket, basket_x, basket_y)
 
 
 # УРОВЕНЬ 4: Каждую секунду уменьшаем таймер
@@ -158,6 +134,8 @@ def update_game():
     if not game_active:
         return
 
+    # УРОВЕНЬ 1 и УРОВЕНЬ 3: Базовая скорость падения увеличена,
+    # плюс скорость растёт на 1 единицу за каждые 5 набранных очков
     current_speed = 6 + (score // 5)
 
     for obj in objects[:]:
@@ -166,15 +144,17 @@ def update_game():
         y = obj[2]
         object_type = obj[3]
 
+        # Двигаем предмет вниз с динамической скоростью
         y += current_speed
         obj[2] = y
 
         canvas.move(item, 0, current_speed)
 
-        # Проверяем ловлю корзиной
+        # Проверяем, поймали ли предмет корзиной (высота basket_y = HEIGHT - 60)
         if y >= HEIGHT - 90 and y <= HEIGHT - 40:
-            if abs(x - basket_x) < 50:
+            if abs(x - basket_x) < 50:  # Ширина ловли под картинку
 
+                # УРОВЕНЬ 4: Новые правила набора очков
                 if object_type == "apple":
                     score += 1
                 elif object_type == "pear":
@@ -189,8 +169,8 @@ def update_game():
                 objects.remove(obj)
                 continue
 
-        # Если предмет упал мимо экрана
-        if y > HEIGHT + 20:
+        # Если предмет упал мимо экрана (в режиме на время за пропуск ничего не отнимается)
+        if y > HEIGHT:
             canvas.delete(item)
             objects.remove(obj)
 
@@ -202,18 +182,16 @@ def update_game():
 def end_game():
     canvas.delete("all")
 
-    # Снова рисуем фон или заливку
-    if bg_image:
-        canvas.create_image(0, 0, image=bg_image, anchor="nw")
-    else:
-        canvas.create_rectangle(0, 0, WIDTH, HEIGHT, fill="#2e5c1e", outline="")
+    # Снова рисуем фон на чистом экране
+    canvas.create_image(0, 0, image=bg_image, anchor="nw")
 
+    # УРОВЕНЬ 1 и УРОВЕНЬ 4: Полностью переписанный текст окончания игры
     canvas.create_text(
         WIDTH // 2,
         HEIGHT // 2,
         text=f"Время вышло!\nТы набрал {score} очков.",
         font=("Arial", 28, "bold"),
-        fill="white" if not bg_image else "black",
+        fill="black",
         justify="center"
     )
 
@@ -225,6 +203,6 @@ root.bind("<Right>", move_right)
 # Запуск игры
 create_object()
 update_game()
-update_timer()
+update_timer()  # Запуск отсчета 30 секунд
 
 root.mainloop()
