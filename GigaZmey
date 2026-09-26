@@ -1,0 +1,250 @@
+import pygame
+import random
+import sys
+
+# Инициализация Pygame
+pygame.init()
+
+# Константы размеров
+WINDOW_WIDTH = 800
+WINDOW_HEIGHT = 600
+GRID_SIZE = 20
+GRID_WIDTH = WINDOW_WIDTH // GRID_SIZE
+GRID_HEIGHT = WINDOW_HEIGHT // GRID_SIZE
+
+# Цвета (RGB)
+COLOR_BG = (20, 20, 30)
+COLOR_SNAKE_HEAD = (50, 220, 100)
+COLOR_SNAKE_BODY = (35, 160, 75)
+COLOR_APPLE = (230, 50, 50)
+COLOR_GOLDEN_APPLE = (255, 215, 0)
+COLOR_WALL = (140, 100, 80)
+COLOR_TEXT = (240, 240, 240)
+COLOR_TIMER_APPLE = (255, 200, 50)
+COLOR_TIMER_WALL = (50, 150, 255)
+
+# Настройка экрана
+screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
+pygame.display.set_caption("Продвинутая Змейка")
+clock = pygame.time.Clock()
+font = pygame.font.SysFont("Arial", 22)
+font_large = pygame.font.SysFont("Arial", 40)
+
+class SnakeGame:
+    def __init__(self):
+        self.reset_game()
+        
+    def reset_game(self):
+        # Начальное состояние змейки
+        self.snake = [
+            [GRID_WIDTH // 2, GRID_HEIGHT // 2],
+            [GRID_WIDTH // 2 - 1, GRID_HEIGHT // 2],
+            [GRID_WIDTH // 2 - 2, GRID_HEIGHT // 2]
+        ]
+        self.direction = [1, 0] # Движение вправо
+        self.next_direction = [1, 0]
+        
+        self.score = 0
+        self.level = 1
+        self.base_speed = 8
+        self.game_over = False
+        
+        # Таймеры (в миллисекундах)
+        current_time = pygame.time.get_ticks()
+        self.last_wall_change = current_time
+        self.wall_interval = 15000 # 15 секунд
+        
+        # Генерация элементов
+        self.walls = []
+        self.generate_walls()
+        self.generate_apple()
+        
+    def generate_walls(self):
+        self.walls = []
+        # Генерируем 4-6 случайных блоков препятствий (линий или крестов)
+        num_obstacles = random.randint(4, 6)
+        
+        for _ in range(num_obstacles):
+            obs_type = random.choice(["horizontal", "vertical", "block"])
+            length = random.randint(3, 5)
+            
+            # Случайная начальная точка (не слишком близко к центру и краям)
+            start_x = random.randint(4, GRID_WIDTH - 6)
+            start_y = random.randint(4, GRID_HEIGHT - 6)
+            
+            # Проверка, чтобы препятствие не появилось прямо на голове змейки
+            head_x, head_y = self.snake[0]
+            if abs(start_x - head_x) < 4 and abs(start_y - head_y) < 4:
+                continue
+                
+            for i in range(length):
+                if obs_type == "horizontal":
+                    wx, wy = start_x + i, start_y
+                elif obs_type == "vertical":
+                    wx, wy = start_x, start_y + i
+                else:
+                    wx, wy = start_x + (i % 2), start_y + (i // 2)
+                    
+                if 0 <= wx < GRID_WIDTH and 0 <= wy < GRID_HEIGHT:
+                    # Не ставим стену прямо на змейку
+                    if [wx, wy] not in self.snake:
+                        self.walls.append([wx, wy])
+
+    def generate_apple(self):
+        while True:
+            self.apple_pos = [random.randint(0, GRID_WIDTH - 1), random.randint(0, GRID_HEIGHT - 1)]
+            # Проверяем, чтобы яблоко не появилось внутри змейки или стены
+            if self.apple_pos not in self.snake and self.apple_pos not in self.walls:
+                break
+                
+        # Шанс 15% на появление золотого яблока
+        self.is_golden = random.random() < 0.15
+        if self.is_golden:
+            self.golden_timer = 7000 # Золотое яблоко исчезает через 7 секунд
+            self.golden_start_time = pygame.time.get_ticks()
+
+    def handle_input(self):
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            elif event.type == pygame.KEYDOWN:
+                if self.game_over:
+                    if event.key == pygame.K_SPACE:
+                        self.reset_game()
+                    return
+                    
+                if event.key in [pygame.K_UP, pygame.K_w] and self.direction != [0, 1]:
+                    self.next_direction = [0, -1]
+                elif event.key in [pygame.K_DOWN, pygame.K_s] and self.direction != [0, -1]:
+                    self.next_direction = [0, 1]
+                elif event.key in [pygame.K_LEFT, pygame.K_a] and self.direction != [1, 0]:
+                    self.next_direction = [-1, 0]
+                elif event.key in [pygame.K_RIGHT, pygame.K_d] and self.direction != [-1, 0]:
+                    self.next_direction = [1, 0]
+
+    def update(self):
+        if self.game_over:
+            return
+
+        current_time = pygame.time.get_ticks()
+        
+        # --- Обработка смены стен каждые 15 секунд ---
+        if current_time - self.last_wall_change >= self.wall_interval:
+            self.generate_walls()
+            self.last_wall_change = current_time
+            # Если стены перегенерировались поверх текущего яблока, переносим его
+            if self.apple_pos in self.walls:
+                self.generate_apple()
+
+        # --- Обработка золотого яблока ---
+        if self.is_golden:
+            elapsed = current_time - self.golden_start_time
+            if elapsed >= self.golden_timer:
+                # Время вышло, заменяем на обычное
+                self.generate_apple()
+
+        # Движение змейки
+        self.direction = self.next_direction
+        new_head = [self.snake[0][0] + self.direction[0], self.snake[0][1] + self.direction[1]]
+
+        # Проверка столкновения со стенами или границами
+        if (new_head[0] < 0 or new_head[0] >= GRID_WIDTH or
+            new_head[1] < 0 or new_head[1] >= GRID_HEIGHT or
+            new_head in self.walls or new_head in self.snake):
+            self.game_over = True
+            return
+
+        # Вставляем новую голову
+        self.snake.insert(0, new_head)
+
+        # Проверка поедания яблока
+        if new_head == self.apple_pos:
+            if self.is_golden:
+                self.score += 30
+            else:
+                self.score += 10
+                
+            # Рост уровня каждые 50 очков
+            self.level = 1 + self.score // 50
+            self.generate_apple()
+        else:
+            # Убираем хвост, если яблоко не съедено
+            self.snake.pop()
+
+    def draw(self):
+        screen.fill(COLOR_BG)
+        current_time = pygame.time.get_ticks()
+
+        # Рисуем препятствия (стены)
+        for wall in self.walls:
+            rect = pygame.Rect(wall[0] * GRID_SIZE, wall[1] * GRID_SIZE, GRID_SIZE - 1, GRID_SIZE - 1)
+            pygame.draw.rect(screen, COLOR_WALL, rect, border_radius=3)
+
+        # Рисуем яблоко
+        apple_rect = pygame.Rect(self.apple_pos[0] * GRID_SIZE, self.apple_pos[1] * GRID_SIZE, GRID_SIZE - 1, GRID_SIZE - 1)
+        if self.is_golden:
+            pygame.draw.rect(screen, COLOR_GOLDEN_APPLE, apple_rect, border_radius=10)
+        else:
+            pygame.draw.rect(screen, COLOR_APPLE, apple_rect, border_radius=10)
+
+        # Рисуем змейку
+        for i, segment in enumerate(self.snake):
+            rect = pygame.Rect(segment[0] * GRID_SIZE, segment[1] * GRID_SIZE, GRID_SIZE - 1, GRID_SIZE - 1)
+            color = COLOR_SNAKE_HEAD if i == 0 else COLOR_SNAKE_BODY
+            pygame.draw.rect(screen, color, rect, border_radius=4)
+
+        # --- Интерфейс пользователя (UI) ---
+        # Очки и уровень
+        score_txt = font.render(f"Очки: {self.score}", True, COLOR_TEXT)
+        level_txt = font.render(f"Уровень: {self.level}", True, COLOR_TEXT)
+        screen.blit(score_txt, (20, 15))
+        screen.blit(level_txt, (150, 15))
+
+        # Шкала таймера для препятствий (сверху справа)
+        wall_time_passed = current_time - self.last_wall_change
+        wall_time_left = max(0, self.wall_interval - wall_time_passed)
+        wall_bar_width = int((wall_time_left / self.wall_interval) * 150)
+        
+        wall_lbl = font.render("Стена:", True, COLOR_TEXT)
+        screen.blit(wall_lbl, (WINDOW_WIDTH - 230, 15))
+        pygame.draw.rect(screen, (50, 50, 70), (WINDOW_WIDTH - 170, 20, 150, 12))
+        pygame.draw.rect(screen, COLOR_TIMER_WALL, (WINDOW_WIDTH - 170, 20, wall_bar_width, 12))
+
+        # Шкала таймера для золотого яблока (если активно)
+        if self.is_golden:
+            apple_time_passed = current_time - self.golden_start_time
+            apple_time_left = max(0, self.golden_timer - apple_time_passed)
+            apple_bar_width = int((apple_time_left / self.golden_timer) * 150)
+            
+            apple_lbl = font.render("Золото:", True, COLOR_TEXT)
+            screen.blit(apple_lbl, (WINDOW_WIDTH - 245, 40))
+            pygame.draw.rect(screen, (50, 50, 70), (WINDOW_WIDTH - 170, 45, 150, 12))
+            pygame.draw.rect(screen, COLOR_TIMER_APPLE, (WINDOW_WIDTH - 170, 45, apple_bar_width, 12))
+
+        # Экран окончания игры
+        if self.game_over:
+            overlay = pygame.Surface((WINDOW_WIDTH, WINDOW_HEIGHT), pygame.SRCALPHA)
+            overlay.fill((0, 0, 0, 180))
+            screen.blit(overlay, (0, 0))
+            
+            gov_txt = font_large.render("ИГРА ОКОНЧЕНА", True, COLOR_APPLE)
+            restart_txt = font.render("Нажмите ПРОБЕЛ, чтобы играть снова", True, COLOR_TEXT)
+            
+            screen.blit(gov_txt, (WINDOW_WIDTH // 2 - gov_txt.get_width() // 2, WINDOW_HEIGHT // 2 - 50))
+            screen.blit(restart_txt, (WINDOW_WIDTH // 2 - restart_txt.get_width() // 2, WINDOW_HEIGHT // 2 + 10))
+
+        pygame.display.flip()
+
+    def run(self):
+        while True:
+            self.handle_input()
+            self.update()
+            self.draw()
+            # Скорость растет с уровнем
+            current_speed = self.base_speed + min(self.level, 10)
+            clock.tick(current_speed)
+
+if __name__ == "__main__":
+    game = SnakeGame()
+    game.run()
